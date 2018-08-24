@@ -55,22 +55,28 @@ class Taxi:
                 if self.graph[pre_init][pre_end]['volume']>0:
                     self.graph[pre_init][pre_end]['volume'] -= 1
 
-                # if(self.no==582):
-                #     print('loc',self.location)
-                #     for p in self.passenger_list:
-                #         print('des',p.destination,'p_no',p.no)
                 self.drop_passenger()
                 if len(self.passenger_list) != 0:  # if not reachs the destination
                     pres = self.route[self.route_cursor]
-                    next = self.route[self.route_cursor + 1]
+                    try:
+                        next = self.route[self.route_cursor + 1]
+                    except IndexError:
+                        print(self.no)
+                        print(self.route)
+                        print(self.route_cursor)
+                        for p in self.passenger_list:
+                            print(p.destination)
                     self.time_to_nextnode = self.graph[pres][next]['weight']
                     self.departure_time = 0
 
                     #change volume when taxi runs on another link
                     self.graph[pres][next]['volume'] += 1
+                    self.graph[pres][next]['total_volume'] += 1
 
                 else: # if reaches the destination
+                    self.departure_time = 0
                     self.route = []
+                    self.route_cursor = 0
 
     def cmp(self,passenger):
         origin = self.location
@@ -106,39 +112,54 @@ class Taxi:
 
         #update route
         route = None
-        if self.location == passenger.location:
-            #change its volume when it leave the recent link
-            if len(self.route)>0:
-                l = self.get_recent_link()
-                if self.graph[l[0]][l[1]]['volume']>0:
-                    self.graph[l[0]][l[1]]['volume'] -= 1
+        if self.location == passenger.location and self.departure_time == 0:
             #the taxi can pick the passenger immediately
             rl = [self.location]
             for pa in self.passenger_list:
                 rl.append(pa.destination)
-            route = self.nodelist_to_route(rl)
-        else:
-            #change its volume when it leave the recent link
-            if len(self.route)>0:
-                l = self.get_recent_link()
-                if self.graph[l[0]][l[1]]['volume']>0:
-                    self.graph[l[0]][l[1]]['volume'] -= 1
+            try:
+                route = self.nodelist_to_route(rl)
+                Passenger.on_taxi_num += 1
+                self.route = route
+                self.route_cursor = 0
+                self.departure_time = 0
+                self.time_to_nextnode = self.graph[self.route[0]][self.route[1]]['weight']
+                self.graph[route[0]][route[1]]['total_volume'] += 1
+                self.graph[route[0]][route[1]]['volume'] += 1
+            except nx.NetworkXNoPath:
+                self.passenger_list.remove(passenger)
+                raise nx.NetworkXNoPath
+        elif self.departure_time != 0:
+            #self.departureTime != 0
             #the taxi has to run a while to pick the passenger first
-            rl = [self.location,passenger.location]
+            nextNode = self.route[self.route_cursor+1]
+            rl = [nextNode,passenger.location]
             for pa in self.passenger_list:
                 rl.append(pa.destination)
-            route = self.nodelist_to_route(rl)
-
-
-        self.route = route
-        self.departure_time = 0
-        self.route_cursor = 0
-        #if nx.has_path(self.graph,self.route[0],self.route[1]):
-        self.time_to_nextnode = self.graph[self.route[0]][self.route[1]]['weight']
-        self.graph[route[0]][route[1]]['volume'] += 1
-        Passenger.on_taxi_num += 1
-
-        self.graph[route[0]][route[1]]['volume'] += 1
+            try:
+                self.route = self.nodelist_to_route(rl)
+                self.route = [self.location,]+self.route
+                self.route_cursor = 0
+                Passenger.on_taxi_num += 1
+                if self.no == 491:
+                    print('location:',passenger.location,'destination:',passenger.destination)
+                    print('route after:',self.route)
+            except nx.NetworkXNoPath as e:
+                self.passenger_list.remove(passenger)
+                raise e
+        else:
+            # 1.self.location != passenger.location
+            # 2.self.departureTime == 0
+            r1 = [self.location,passenger.location]
+            for pa in self.passenger_list:
+                r1.append(pa.destination)
+            try:
+                self.route = self.nodelist_to_route(r1)
+                self.route_cursor = 0
+                Passenger.on_taxi_num += 1
+            except nx.NetworkXNoPath as e:
+                self.passenger_list.remove(passenger)
+                raise nx.NetworkXNoPath
 
 
 class Passenger:
